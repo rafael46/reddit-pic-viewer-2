@@ -1,6 +1,9 @@
 'use strict'
 
-import { app, protocol, BrowserWindow } from 'electron'
+import { app, protocol, BrowserWindow, ipcMain } from 'electron'
+import * as path from 'path'
+import { format as formatUrl } from 'url'
+
 import {
   createProtocol,
   installVueDevtools
@@ -9,30 +12,70 @@ const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let win
+let mainWindow;
+let imageWindow;
+let settingsWindow;
 
 // Scheme must be registered before the app is ready
-protocol.registerSchemesAsPrivileged([{scheme: 'app', privileges: { secure: true, standard: true } }])
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { secure: true, standard: true } }])
 
-function createWindow () {
+function createWindow() {
   // Create the browser window.
-  win = new BrowserWindow({ width: 800, height: 600, webPreferences: {
-    nodeIntegration: true
-  } })
+  const window = new BrowserWindow({
+    width: 800, height: 600, webPreferences: {
+      nodeIntegration: true,
+      webSecurity: false
+    }
+  });
+  const image = new BrowserWindow({
+    width: 400, height: 400, webPreferences: {
+      nodeIntegration: true,
+      // webSecurity: false
+    }, parent: window, show: true
+  });
+  const settings = new BrowserWindow({ width: 400, height: 400, parent: window, show: false })
 
   if (process.env.WEBPACK_DEV_SERVER_URL) {
     // Load the url of the dev server if in development mode
-    win.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
-    if (!process.env.IS_TEST) win.webContents.openDevTools()
+    window.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
+    image.loadURL(process.env.WEBPACK_DEV_SERVER_URL + '/#/image')
+    settings.loadURL(process.env.WEBPACK_DEV_SERVER_URL + '/#/settings')
+
+    if (!process.env.IS_TEST) window.webContents.openDevTools()
   } else {
     createProtocol('app')
     // Load the index.html when not in development
-    win.loadURL('app://./index.html')
+    window.loadURL('app://./index.html')
+
+    image.loadURL(`file://${__dirname}/index.html#image`)
+    settings.loadURL(`file://${__dirname}/index.html#settings`)
+
   }
 
-  win.on('closed', () => {
-    win = null
+  window.on('close', () => {
+    mainWindow = null
   })
+  image.on('close', (e) => {
+    e.preventDefault()
+    image.hide()
+  })
+  settings.on('close', (e) => {
+    e.preventDefault()
+    settings.hide()
+  })
+
+  window.webContents.on('devtools-opened', () => {
+    window.focus()
+    setImmediate(() => {
+      window.focus()
+    })
+  })
+  imageWindow = image
+  settingsWindow = settings
+
+  return window
+
+
 }
 
 // Quit when all windows are closed.
@@ -47,7 +90,7 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   // On macOS it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
-  if (win === null) {
+  if (mainWindow === null) {
     createWindow()
   }
 })
@@ -58,6 +101,7 @@ app.on('activate', () => {
 app.on('ready', async () => {
   if (isDevelopment && !process.env.IS_TEST) {
     // Install Vue Devtools
+    // await installVueDevtools()
     try {
       await installVueDevtools()
     } catch (e) {
@@ -65,7 +109,17 @@ app.on('ready', async () => {
     }
   }
   createWindow()
+});
+// ----------
+ipcMain.on('toggle-image', (event, arg) => {
+  imageWindow.show();
+  imageWindow.webContents.send('image', arg);
 })
+
+ipcMain.on('toggle-settings', () => {
+  settingsWindow.isVisible() ? settingsWindow.hide() : settingsWindow.show()
+})
+// ----------------
 
 // Exit cleanly on request from parent process in development mode.
 if (isDevelopment) {
