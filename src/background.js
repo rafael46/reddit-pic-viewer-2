@@ -1,8 +1,8 @@
 'use strict'
 
 import { app, protocol, BrowserWindow, ipcMain } from 'electron'
-import * as path from 'path'
-import { format as formatUrl } from 'url'
+// import * as path from 'path'
+// import { format as formatUrl } from 'url'
 
 import {
   createProtocol,
